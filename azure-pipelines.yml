@@ -1,0 +1,54 @@
+trigger:
+- main  # Trigger the pipeline on push to the 'main' branch
+
+pool:
+  vmImage: 'ubuntu-latest'  # Use an Ubuntu-based virtual machine
+
+stages:
+  
+  # Build Stage: Compile the source code and generate artifacts
+  - stage: Build
+    jobs:
+    - job: BuildJob
+      steps:
+      - task: UseDotNet@2  # Install .NET SDK (Adjust if using a different framework)
+        inputs:
+          packageType: 'sdk'
+          version: '8.x'  # Specify .NET SDK version (adjust as needed)
+          installationPath: $(Agent.ToolsDirectory)/dotnet
+      - script: dotnet build --configuration Release  # Build the project
+        displayName: 'Build Project'
+      - task: PublishBuildArtifacts@1  # Save the build artifacts
+        inputs:
+          PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+          ArtifactName: 'drop'
+
+  # Test Stage: Run unit tests and code quality checks
+  - stage: Test
+    dependsOn: Build  # Run this stage after the Build stage
+    jobs:
+    - job: TestJob
+      steps:
+      - script: dotnet test --configuration Release --no-build  # Run unit tests
+        displayName: 'Run Unit Tests'
+      - script: dotnet tool install --global dotnet-reportgenerator-globaltool  # Install code coverage tool
+      - script: dotnet test --collect:"XPlat Code Coverage"  # Collect code coverage data
+        displayName: 'Run Code Coverage'
+
+  # Deploy Stage: Deploy to a staging environment
+  - stage: Deploy
+    dependsOn: Test  # Run this stage after the Test stage
+    jobs:
+    - deployment: DeployJob
+      environment: 'staging'  # Define the staging environment
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - script: echo "Deploying to Staging Environment..."  # Placeholder for deployment script
+              displayName: 'Deploy to Staging'
+            - task: AzureWebApp@1  # Deployment task for an Azure Web App
+              inputs:
+                azureSubscription: '<Azure-for-Students>'  # Replace with your Azure subscription
+                appName: '<ASP-az400test2group-9d79>'  # Replace with your Azure Web App name
+                package: '$(Pipeline.Workspace)/drop'  # Deploy the build artifacts
